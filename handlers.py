@@ -18,6 +18,7 @@ from database import (
     finish_giveaway,
     get_giveaways_history,
     add_participant,
+    is_participant,
     get_participants_count,
     is_registration_closed,
     draw_winner,
@@ -43,13 +44,16 @@ def is_admin(user_id):
 # СТАРТ
 # -------------------------
 
-
 async def start_handler(message: Message):
+
+    user_id = message.from_user.id
 
     await message.answer(
         "👋 Добро пожаловать!\n"
         "Нажмите «🚀 Старт», чтобы открыть участие в розыгрыше.",
-        reply_markup=user_keyboard()
+        reply_markup=user_keyboard(
+            is_admin=is_admin(user_id)
+        )
     )
 
     giveaway = get_active_giveaway()
@@ -57,6 +61,18 @@ async def start_handler(message: Message):
     if not giveaway:
         await message.answer(
             "⏳ Сейчас нет активного розыгрыша."
+        )
+        return
+
+    giveaway_id = giveaway[0]
+
+    # Проверяем регистрацию до проверки закрытия.
+    # Уже зарегистрированный участник получит понятное сообщение,
+    # даже если регистрация после этого была закрыта.
+    if is_participant(user_id, giveaway_id):
+        await message.answer(
+            "✅ Вы уже являетесь участником текущего розыгрыша!\n\n"
+            "Повторно регистрироваться не нужно. Удачи! 🍀"
         )
         return
 
@@ -137,7 +153,26 @@ async def check_subscription_handler(callback: CallbackQuery):
 
     user = callback.from_user
 
-    if is_registration_closed():
+    giveaway = get_active_giveaway()
+
+    if not giveaway:
+        await callback.answer(
+            "Сейчас нет активного розыгрыша.",
+            show_alert=True
+        )
+        return
+
+    giveaway_id = giveaway[0]
+
+    # Сначала проверяем, не зарегистрирован ли человек.
+    if is_participant(user.id, giveaway_id):
+        await callback.answer(
+            "Вы уже участвуете в этом розыгрыше!",
+            show_alert=True
+        )
+        return
+
+    if giveaway[2]:
         await callback.answer(
             "Регистрация уже завершена!",
             show_alert=True
@@ -162,7 +197,7 @@ async def check_subscription_handler(callback: CallbackQuery):
         full_name=user.full_name
     )
 
-    count = get_participants_count()
+    count = get_participants_count(giveaway_id)
 
     if added:
         text = (
@@ -171,8 +206,10 @@ async def check_subscription_handler(callback: CallbackQuery):
             f"👥 Участников: {count}"
         )
     else:
+        # Защита на случай, если регистрация произошла
+        # между проверкой и добавлением участника.
         text = (
-            "ℹ️ Вы уже зарегистрированы!\n\n"
+            "ℹ️ Вы уже зарегистрированы или регистрация завершена.\n\n"
             f"👥 Участников: {count}"
         )
 
@@ -351,6 +388,16 @@ async def show_admin_panel(message: Message):
 
 @router.message(Command("admin"))
 async def admin_panel(message: Message):
+
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Нет доступа.")
+        return
+
+    await show_admin_panel(message)
+
+
+@router.message(F.text == "🛠 Админ панель")
+async def admin_panel_button(message: Message):
 
     if not is_admin(message.from_user.id):
         await message.answer("⛔ Нет доступа.")
@@ -545,7 +592,7 @@ async def admin_confirm_finish(callback: CallbackQuery):
     )
 
     await callback.message.answer(
-        "Теперь можно создать новый розыгрыш командой /admin.",
+        "Теперь можно создать новый розыгрыш через панель администратора.",
         reply_markup=admin_keyboard(active_giveaway=False)
     )
 

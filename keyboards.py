@@ -9,11 +9,18 @@ from aiogram.types import (
 from database import get_channels
 
 
-def user_keyboard():
+def user_keyboard(is_admin=False):
+    buttons = [
+        [KeyboardButton(text="🚀 Старт")]
+    ]
+
+    if is_admin:
+        buttons.append([
+            KeyboardButton(text="🛠 Админ панель")
+        ])
+
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🚀 Старт")]
-        ],
+        keyboard=buttons,
         resize_keyboard=True
     )
 

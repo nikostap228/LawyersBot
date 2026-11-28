@@ -271,6 +271,36 @@ def _get_giveaway_id(db, giveaway_id=None):
 # УЧАСТНИКИ
 # -------------------------
 
+def is_participant(user_id, giveaway_id=None):
+    """Проверяет, зарегистрирован ли пользователь в розыгрыше."""
+
+    with connect() as db:
+
+        if giveaway_id is None:
+            giveaway = db.execute("""
+                SELECT id
+                FROM giveaways
+                WHERE status = 'active'
+                ORDER BY id DESC
+                LIMIT 1
+            """).fetchone()
+
+            if not giveaway:
+                return False
+
+            giveaway_id = giveaway[0]
+
+        result = db.execute("""
+            SELECT 1
+            FROM giveaway_participants
+            WHERE giveaway_id = ?
+              AND user_id = ?
+            LIMIT 1
+        """, (giveaway_id, user_id)).fetchone()
+
+        return result is not None
+
+
 def add_participant(user_id, username, full_name):
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -368,6 +398,7 @@ def draw_winner():
             WHERE id = ?
         """, (giveaway_id,))
 
+        # Равновероятный случайный выбор среди оставшихся участников.
         winner = random.SystemRandom().choice(participants)
 
         db.execute("""
