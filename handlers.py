@@ -43,6 +43,7 @@ def is_admin(user_id):
 # СТАРТ
 # -------------------------
 
+
 async def start_handler(message: Message):
 
     await message.answer(
@@ -51,22 +52,24 @@ async def start_handler(message: Message):
         reply_markup=user_keyboard()
     )
 
-    if is_admin(message.from_user.id):
-        await show_admin_panel(message)
-        return
-
     giveaway = get_active_giveaway()
 
     if not giveaway:
-        await message.answer("⏳ Сейчас нет активного розыгрыша.")
+        await message.answer(
+            "⏳ Сейчас нет активного розыгрыша."
+        )
         return
 
     if giveaway[2]:
-        await message.answer("⛔ Регистрация на розыгрыш завершена.")
+        await message.answer(
+            "⛔ Регистрация на розыгрыш завершена."
+        )
         return
 
     if not get_channels():
-        await message.answer("⏳ Организатор ещё не добавил каналы.")
+        await message.answer(
+            "⏳ Организатор ещё не добавил каналы."
+        )
         return
 
     await message.answer(
