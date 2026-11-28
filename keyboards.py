@@ -1,10 +1,21 @@
 
 from aiogram.types import (
     InlineKeyboardMarkup,
-    InlineKeyboardButton
+    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton
 )
 
 from database import get_channels
+
+
+def user_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🚀 Старт")]
+        ],
+        resize_keyboard=True
+    )
 
 
 def participation_keyboard():
@@ -58,7 +69,6 @@ def admin_keyboard(active_giveaway=True):
                 )
             ]
         ])
-
     else:
         buttons.append([
             InlineKeyboardButton(
@@ -75,3 +85,20 @@ def admin_keyboard(active_giveaway=True):
     ])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def finish_confirmation_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="✅ Да, завершить",
+                callback_data="admin_confirm_finish"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="❌ Отмена",
+                callback_data="admin_cancel_finish"
+            )
+        ]
+    ])

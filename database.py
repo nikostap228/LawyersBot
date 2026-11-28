@@ -22,13 +22,12 @@ def connect():
 
 
 # -------------------------
-# ИНИЦИАЛИЗАЦИЯ И МИГРАЦИЯ
+# ИНИЦИАЛИЗАЦИЯ БАЗЫ
 # -------------------------
 
 def init_db():
     with connect() as db:
 
-        # Каналы
         db.execute("""
             CREATE TABLE IF NOT EXISTS channels (
                 chat_id INTEGER PRIMARY KEY,
@@ -37,7 +36,6 @@ def init_db():
             )
         """)
 
-        # Все розыгрыши
         db.execute("""
             CREATE TABLE IF NOT EXISTS giveaways (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +47,6 @@ def init_db():
             )
         """)
 
-        # Участники каждого розыгрыша
         db.execute("""
             CREATE TABLE IF NOT EXISTS giveaway_participants (
                 giveaway_id INTEGER NOT NULL,
@@ -65,7 +62,6 @@ def init_db():
             )
         """)
 
-        # Победители каждого розыгрыша
         db.execute("""
             CREATE TABLE IF NOT EXISTS giveaway_winners (
                 giveaway_id INTEGER NOT NULL,
@@ -81,25 +77,36 @@ def init_db():
             )
         """)
 
-        # Проверяем, есть ли старая база с одним розыгрышем
-        old_giveaway = db.execute("""
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table' AND name = 'giveaway'
-        """).fetchone()
+        # Миграция старой базы, если она действительно существовала.
+        # Не создаём розыгрыш автоматически на чистой базе.
 
-        giveaways_count = db.execute("""
-            SELECT COUNT(*) FROM giveaways
-        """).fetchone()[0]
+        old_tables = {
+            row[0] for row in db.execute("""
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+            """).fetchall()
+        }
 
-        # Переносим старые данные только при первой миграции
-        if giveaways_count == 0:
+        giveaways_count = db.execute(
+            "SELECT COUNT(*) FROM giveaways"
+        ).fetchone()[0]
 
-            old_state = db.execute("""
-                SELECT registration_closed
-                FROM giveaway
-                WHERE id = 1
-            """).fetchone() if old_giveaway else None
+        has_old_data = any(
+            name in old_tables
+            for name in ("giveaway", "participants", "winners")
+        )
+
+        if giveaways_count == 0 and has_old_data:
+
+            old_state = None
+
+            if "giveaway" in old_tables:
+                old_state = db.execute("""
+                    SELECT registration_closed
+                    FROM giveaway
+                    WHERE id = 1
+                """).fetchone()
 
             registration_closed = (
                 int(old_state[0]) if old_state else 0
@@ -111,14 +118,7 @@ def init_db():
                 VALUES (1, 'active', ?)
             """, (registration_closed,))
 
-            # Перенос старых участников
-            old_participants = db.execute("""
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'table' AND name = 'participants'
-            """).fetchone()
-
-            if old_participants:
+            if "participants" in old_tables:
                 db.execute("""
                     INSERT OR IGNORE INTO giveaway_participants
                     (giveaway_id, user_id, username, full_name, joined_at)
@@ -126,14 +126,7 @@ def init_db():
                     FROM participants
                 """)
 
-            # Перенос старых победителей
-            old_winners = db.execute("""
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'table' AND name = 'winners'
-            """).fetchone()
-
-            if old_winners:
+            if "winners" in old_tables:
                 db.execute("""
                     INSERT OR IGNORE INTO giveaway_winners
                     (giveaway_id, user_id, username, full_name, selected_at)
@@ -203,17 +196,12 @@ def get_active_giveaway():
 
 
 def create_giveaway():
-    """
-    Создаёт новый розыгрыш.
-    Возвращает ID нового розыгрыша.
-    Если предыдущий ещё активен, возвращает None.
-    """
-
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
 
         active = db.execute("""
-            SELECT id FROM giveaways
+            SELECT id
+            FROM giveaways
             WHERE status = 'active'
             LIMIT 1
         """).fetchone()
@@ -231,11 +219,6 @@ def create_giveaway():
 
 
 def finish_giveaway():
-    """
-    Завершает текущий розыгрыш.
-    Возвращает True при успехе, иначе False.
-    """
-
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
 
@@ -264,7 +247,8 @@ def _get_giveaway_id(db, giveaway_id=None):
         return giveaway_id
 
     result = db.execute("""
-        SELECT id FROM giveaways
+        SELECT id
+        FROM giveaways
         WHERE status = 'active'
         ORDER BY id DESC
         LIMIT 1
@@ -274,7 +258,8 @@ def _get_giveaway_id(db, giveaway_id=None):
         return result[0]
 
     result = db.execute("""
-        SELECT id FROM giveaways
+        SELECT id
+        FROM giveaways
         ORDER BY id DESC
         LIMIT 1
     """).fetchone()
@@ -376,7 +361,7 @@ def draw_winner():
         if not participants:
             return None, "empty"
 
-        # Первый выбор закрывает регистрацию
+        # Первый выбор победителя закрывает регистрацию.
         db.execute("""
             UPDATE giveaways
             SET registration_closed = 1
@@ -395,7 +380,7 @@ def draw_winner():
 
 
 # -------------------------
-# СПИСОК ПОБЕДИТЕЛЕЙ
+# ПОБЕДИТЕЛИ
 # -------------------------
 
 def get_winners(giveaway_id=None):
